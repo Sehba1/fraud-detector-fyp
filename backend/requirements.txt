@@ -1,0 +1,48 @@
+# ==========================================================
+# Backend & ML dependencies for the Fraud Detector FYP
+# Phase 1: listed for environment setup only.
+# No code has been implemented yet that uses these.
+# ==========================================================
+
+# --- Web framework / API ---
+fastapi
+uvicorn[standard]
+python-multipart      # required by FastAPI for file/image uploads
+pydantic
+
+# --- Data handling ---
+pandas
+numpy
+
+# --- Machine learning (baseline models) ---
+scikit-learn
+imbalanced-learn      # SMOTE for class imbalance handling
+
+# --- Deep learning (BERT fine-tuning) ---
+torch
+transformers
+
+# --- Explainable AI ---
+lime
+shap
+
+# --- OCR ---
+pytesseract
+Pillow
+opencv-python-headless
+# Note: pytesseract also requires the system package `tesseract-ocr`
+# (install separately via apt/brew — not a pip package).
+
+# --- Database ---
+sqlalchemy
+
+# --- Environment / config ---
+python-dotenv
+
+# --- Testing ---
+pytest
+
+# --- Notebooks / experimentation (ml/ folder) ---
+jupyter
+matplotlib
+seaborn

@@ -1,0 +1,69 @@
+# ==========================================================
+# Python
+# ==========================================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# ==========================================================
+# Environment files (never commit secrets/config)
+# ==========================================================
+.env
+.env.*
+!.env.example
+
+# ==========================================================
+# Node / Frontend
+# ==========================================================
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================================
+# ML data & model artifacts (large binary files — not versioned)
+# ==========================================================
+ml/data/raw/*
+!ml/data/raw/.gitkeep
+!ml/data/raw/README.md
+
+ml/data/processed/*
+!ml/data/processed/.gitkeep
+!ml/data/processed/README.md
+
+ml/saved_models/*
+!ml/saved_models/.gitkeep
+!ml/saved_models/README.md
+
+*.pt
+*.bin
+*.h5
+*.ckpt
+
+# ==========================================================
+# Jupyter
+# ==========================================================
+.ipynb_checkpoints/
+
+# ==========================================================
+# Database
+# ==========================================================
+*.sqlite3
+*.db
+
+# ==========================================================
+# OS / Editor
+# ==========================================================
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json

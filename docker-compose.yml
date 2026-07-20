@@ -1,0 +1,9 @@
+# ==========================================================
+# Placeholder docker-compose.yml
+# ==========================================================
+# This file reserves a spot for containerisation, which is an OPTIONAL,
+# later-phase task (only needed if a containerised demo/deployment is
+# desired near the end of the project).
+#
+# No services are defined yet. Do not implement this in Phase 1.
+# ==========================================================
