@@ -46,3 +46,8 @@ pytest
 jupyter
 matplotlib
 seaborn
+
+# --- HTML parsing (discovered necessary during Phase 2 EDA — naive regex tag-stripping
+#     left <style>/<script> block CONTENTS intact, e.g. embedded CSS background-image url()
+#     data producing meaningless vocabulary terms after digit-stripping) ---
+beautifulsoup4
