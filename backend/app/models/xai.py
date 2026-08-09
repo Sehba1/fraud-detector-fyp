@@ -1,8 +1,14 @@
 """
 XAI (Explainable AI) module for the Fraud Detector backend.
-Provides LIME-based explanations for individual predictions.
 
-LIME is used for real-time explanations (fast enough for live API responses).
+This module provides the model-centric half of the system's hybrid
+explanation framework: LIME-based word-level attributions that explain
+why the BERT model made its prediction.
+
+The knowledge-based half (rule-based scam pattern analysis of the posting
+content) lives separately in app/core/patterns.py and is completely
+independent of the model.
+
 SHAP analysis was conducted separately in ml/notebooks/04_evaluation.ipynb
 for offline/batch global feature importance analysis.
 """
@@ -25,10 +31,40 @@ DECISION_THRESHOLD = 0.5
 MAX_LENGTH = 512
 CLASS_NAMES = ["genuine", "fraudulent"]
 
+# ── Explanation filtering ─────────────────────────────────────────────────────
+# LIME weight magnitudes vary with model confidence, so a fixed absolute
+# cutoff fails. We keep words whose weight is at least RELATIVE_KEEP_RATIO
+# of the strongest word on their own side.
+RELATIVE_KEEP_RATIO = 0.35
+MAX_WORDS_PER_SIDE = 5
+MIN_WORDS_PER_SIDE = 3
+
+# When the model is at least this confident, the opposing side's LIME
+# weights are statistical noise, so they are suppressed rather than shown
+# as misleading "signals".
+COUNTER_SUPPRESS_CONFIDENCE = 0.95
+
+# Grammatical connector words carry no meaning for a human explanation and
+# are removed from the displayed word lists. This mirrors the stopword
+# removal already used for the TF-IDF baselines and is standard XAI
+# readability practice.
+STOPWORDS = {
+    "a", "an", "the", "and", "or", "but", "if", "then", "than", "so",
+    "to", "of", "in", "on", "at", "by", "for", "with", "from", "as",
+    "is", "am", "are", "was", "were", "be", "been", "being",
+    "do", "does", "did", "done", "have", "has", "had",
+    "will", "would", "shall", "should", "can", "could", "may", "might",
+    "must", "it", "its", "this", "that", "these", "those",
+    "i", "we", "you", "he", "she", "they", "them", "his", "her",
+    "our", "your", "their", "my", "me", "us",
+    "not", "no", "nor", "up", "out", "off", "over", "under",
+    "again", "further", "here", "there", "all", "any", "both",
+    "each", "few", "more", "most", "other", "some", "such", "only",
+    "own", "same", "too", "very", "just", "also", "into", "about",
+    "s", "t", "re", "ve", "ll", "d", "m",
+}
+
 # ── Lazy-loaded singletons ────────────────────────────────────────────────────
-# Model and tokenizer are loaded once on first use, not at import time.
-# This avoids a ~2-3 second startup cost when the module is imported
-# during testing or for non-prediction endpoints.
 _tokenizer = None
 _model = None
 _device = None
@@ -113,16 +149,24 @@ def predict_single(text: str) -> dict:
     }
 
 
-def explain_prediction(text: str, num_features: int = 10) -> dict:
+def explain_prediction(text: str, num_features: int = 15) -> dict:
     """
     Generate a LIME explanation for a single text prediction.
 
-    Returns:
-        {
-            "label": str,
-            "fraud_probability": float,
-            "explanation": [{"word": str, "weight": float}, ...]
-        }
+    The prediction (label, confidence, fraud_probability) is computed
+    separately by predict_single() and is NOT affected by anything done
+    here. This function only shapes how the word-level evidence is
+    presented.
+
+    Filtering:
+      - Stopwords (grammatical connector words) are removed first.
+      - Then words are kept only if their weight is at least
+        RELATIVE_KEEP_RATIO of the strongest word on their side.
+      - Between MIN_WORDS_PER_SIDE and MAX_WORDS_PER_SIDE words are shown
+        per side, when available.
+      - When model confidence is at or above COUNTER_SUPPRESS_CONFIDENCE,
+        the opposing side's words are below the noise floor and are
+        suppressed entirely.
     """
     _load_model()
 
@@ -132,14 +176,49 @@ def explain_prediction(text: str, num_features: int = 10) -> dict:
         text,
         predict_proba,
         num_features=num_features,
-        num_samples=300,       # reduced from notebook's 500 for API latency
+        num_samples=300,
         labels=[1],
     )
 
-    explanation = [
+    # Full, unfiltered list of (word, weight) from LIME
+    raw = [
         {"word": word, "weight": round(float(weight), 4)}
         for word, weight in exp.as_list(label=1)
     ]
+
+    # Remove grammatical stopwords from the displayed explanation
+    raw = [w for w in raw if w["word"].lower() not in STOPWORDS]
+
+    # Split into warning (positive) and safe (negative) words
+    warning = [w for w in raw if w["weight"] > 0]
+    safe = [w for w in raw if w["weight"] < 0]
+
+    # Sort each side by strength (largest absolute weight first)
+    warning.sort(key=lambda w: w["weight"], reverse=True)
+    safe.sort(key=lambda w: abs(w["weight"]), reverse=True)
+
+    def filter_side(words):
+        if not words:
+            return []
+        strongest = abs(words[0]["weight"])
+        cutoff = strongest * RELATIVE_KEEP_RATIO
+        kept = [w for w in words if abs(w["weight"]) >= cutoff]
+        if len(kept) < MIN_WORDS_PER_SIDE:
+            kept = words[:MIN_WORDS_PER_SIDE]
+        return kept[:MAX_WORDS_PER_SIDE]
+
+    warning_filtered = filter_side(warning)
+    safe_filtered = filter_side(safe)
+
+    # If the model is extremely confident, the opposing side's words are
+    # statistical noise; drop them so the evidence shown is honest.
+    if prediction["confidence"] >= COUNTER_SUPPRESS_CONFIDENCE:
+        if prediction["label"] == "fraudulent":
+            safe_filtered = []
+        else:
+            warning_filtered = []
+
+    explanation = warning_filtered + safe_filtered
 
     return {
         "label": prediction["label"],

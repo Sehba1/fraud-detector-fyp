@@ -3,20 +3,25 @@ Prediction endpoints for the Fraud Detector API.
 
 POST /predict/text  — analyse a text job posting
 POST /predict/image — analyse an image/screenshot of a job posting
+
+Each request runs two independent explanation layers:
+  1. LIME word-level attributions (model explanation), from app.models.xai
+  2. Rule-based scam pattern analysis (content analysis), from
+     app.core.patterns, which runs on the RAW text before cleaning and
+     never influences the prediction.
 """
 
 import json
-import tempfile
-import os
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.config import LIME_NUM_FEATURES
 from app.core.preprocessing import clean_text
+from app.core.patterns import analyse_posting
 from app.core.ocr import extract_text_from_bytes
 from app.db.database import get_db
 from app.db.schema import Submission, Prediction, Explanation
-from app.models.xai import predict_single, explain_prediction, get_risk_tier
+from app.models.xai import explain_prediction, get_risk_tier
 from app.schemas.prediction import TextPredictionRequest, PredictionResponse
 
 router = APIRouter()
@@ -32,9 +37,16 @@ def _run_prediction_pipeline(
 ) -> PredictionResponse:
     """
     Shared pipeline for both text and image endpoints.
-    Cleans text → predicts → explains → saves to DB → returns response.
+
+    Order matters: the pattern analysis runs on the raw text FIRST,
+    because the BERT cleaning step strips digits and punctuation, which
+    would destroy patterns like "RM500/day" or phone numbers. The model
+    then receives the cleaned text exactly as before.
     """
-    # Step 1: Clean text
+    # Step 1: Rule-based pattern analysis on the raw posting text
+    pattern_result = analyse_posting(raw_text)
+
+    # Step 2: Clean text for the model
     cleaned = clean_text(raw_text)
     if not cleaned:
         raise HTTPException(
@@ -43,29 +55,26 @@ def _run_prediction_pipeline(
                    "more detailed job posting."
         )
 
-    # Step 2: Predict
-    prediction = predict_single(cleaned)
-
-    # Step 3: Explain
+    # Step 3: Predict and explain (LIME layer; includes the prediction)
     explanation_result = explain_prediction(cleaned, num_features=LIME_NUM_FEATURES)
 
     # Step 4: Risk tier
-    risk = get_risk_tier(prediction["fraud_probability"])
+    risk = get_risk_tier(explanation_result["fraud_probability"])
 
-    # Step 5: Save to database
+    # Step 5: Save to database (both layers stored for auditability)
     submission = Submission(
         input_type=input_type,
         raw_input=ocr_raw if ocr_raw else raw_text,
         clean_text=cleaned,
     )
     db.add(submission)
-    db.flush()  # assigns submission.id without committing
+    db.flush()
 
     pred_record = Prediction(
         submission_id=submission.id,
-        label=prediction["label"],
-        fraud_probability=prediction["fraud_probability"],
-        confidence=prediction["confidence"],
+        label=explanation_result["label"],
+        fraud_probability=explanation_result["fraud_probability"],
+        confidence=explanation_result["confidence"],
         risk_tier=risk,
     )
     db.add(pred_record)
@@ -73,19 +82,23 @@ def _run_prediction_pipeline(
 
     expl_record = Explanation(
         prediction_id=pred_record.id,
-        method="lime",
-        top_features_json=json.dumps(explanation_result["explanation"]),
+        method="lime+patterns",
+        top_features_json=json.dumps({
+            "explanation": explanation_result["explanation"],
+            "pattern_analysis": pattern_result,
+        }),
     )
     db.add(expl_record)
     db.commit()
 
     # Step 6: Build response
     return PredictionResponse(
-        label=prediction["label"],
-        confidence=prediction["confidence"],
-        fraud_probability=prediction["fraud_probability"],
+        label=explanation_result["label"],
+        confidence=explanation_result["confidence"],
+        fraud_probability=explanation_result["fraud_probability"],
         risk_tier=risk,
         explanation=explanation_result["explanation"],
+        pattern_analysis=pattern_result,
         input_type=input_type,
         ocr_text=ocr_raw,
     )
@@ -100,7 +113,8 @@ async def predict_text(
     Analyse a text job posting for fraud.
 
     Accepts raw or HTML job posting text.
-    Returns label, confidence, risk tier, and LIME word-level explanation.
+    Returns label, confidence, risk tier, rule-based pattern analysis of
+    the content, and word-level LIME evidence for the model's decision.
     """
     return _run_prediction_pipeline(
         raw_text=request.text,
@@ -119,7 +133,6 @@ async def predict_image(
 
     Accepts JPEG, PNG, WebP, or BMP image uploads.
     Extracts text via OCR, then analyses for fraud.
-    Returns label, confidence, risk tier, LIME explanation, and raw OCR text.
     """
     if file.content_type not in SUPPORTED_IMAGE_TYPES:
         raise HTTPException(
