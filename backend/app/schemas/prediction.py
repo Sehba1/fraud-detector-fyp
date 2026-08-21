@@ -27,6 +27,32 @@ class ExplanationItem(BaseModel):
     )
 
 
+class ReasonGroup(BaseModel):
+    id: str = Field(description="Stable identifier for this vocabulary group.")
+    title: str = Field(description="Human-readable group title.")
+    words: List[ExplanationItem] = Field(
+        description="LIME features from this prediction that belong to this group."
+    )
+    attribution: float = Field(
+        description="Sum of absolute LIME weights for this group's words."
+    )
+    contribution_pct: float = Field(
+        description="This group's share of the model's total measured attribution, "
+                    "as a percentage."
+    )
+
+
+class LimeReasons(BaseModel):
+    heading: str = Field(description="Section heading for the model's reasoning.")
+    summary: str = Field(
+        description="One-sentence summary of the model's measured attribution."
+    )
+    groups: List[ReasonGroup] = Field(
+        description="LIME features grouped by vocabulary, ordered by measured "
+                    "contribution."
+    )
+
+
 class PatternCategory(BaseModel):
     id: str = Field(description="Stable identifier for this pattern category.")
     title: str = Field(description="Human-readable category title.")
@@ -35,6 +61,17 @@ class PatternCategory(BaseModel):
     )
     explanation: str = Field(
         description="Plain-language explanation of why this pattern matters."
+    )
+    model_attribution_pct: Optional[float] = Field(
+        default=None,
+        description="Share of the model's total LIME attribution that fell on the "
+                    "words in this category's matched snippets. Zero means the "
+                    "pattern is present in the text but the model did not respond "
+                    "to it."
+    )
+    model_words: List[ExplanationItem] = Field(
+        default_factory=list,
+        description="The LIME features underlying this category's attribution figure."
     )
 
 
@@ -63,9 +100,19 @@ class PredictionResponse(BaseModel):
     explanation: List[ExplanationItem] = Field(
         description="Filtered word-level LIME evidence (model explanation)."
     )
+    lime_reasons: LimeReasons = Field(
+        description="LIME attributions grouped by vocabulary, with each group's "
+                    "measured share of the model's decision."
+    )
+    local_fidelity: Optional[float] = Field(
+        default=None,
+        description="R-squared of the LIME surrogate model, indicating how faithfully "
+                    "the word-level explanation approximates the model's local behaviour."
+    )
     pattern_analysis: PatternAnalysis = Field(
-        description="Rule-based scam pattern analysis of the posting content. "
-                    "Independent of the model and never influences the prediction."
+        description="Rule-based detection of documented fraud indicators, each "
+                    "reporting the model's measured attribution. Detection never "
+                    "influences the prediction."
     )
     input_type: str = Field(description="'text' or 'image'.")
     ocr_text: Optional[str] = Field(

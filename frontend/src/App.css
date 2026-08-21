@@ -861,3 +861,175 @@
   .verdict-metrics { flex-direction: row; margin-left: 0; text-align: left; width: 100%; }
   .logo-tagline { display: none; }
 }
+/* Transparent risk score breakdown */
+.score-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+.score-header.high {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.score-header.medium {
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.3);
+}
+.score-header.low {
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.3);
+}
+
+.score-figure { display: flex; align-items: baseline; gap: 3px; flex-shrink: 0; }
+.score-value {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 34px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+.score-max { font-size: 13px; color: rgba(255,255,255,0.4); }
+
+.score-meta { flex: 1; }
+.score-band {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 8px;
+}
+.score-track {
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.score-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.8s cubic-bezier(0.22,1,0.36,1);
+}
+.score-fill.high { background: linear-gradient(90deg, #f97316, #ef4444); }
+.score-fill.medium { background: linear-gradient(90deg, #f59e0b, #f97316); }
+.score-fill.low { background: linear-gradient(90deg, #10b981, #34d399); }
+
+.score-toggle {
+  background: transparent !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  border-radius: 9px;
+  color: rgba(255,255,255,0.6) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  padding: 8px 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.score-toggle:hover {
+  border-color: rgba(255,255,255,0.28) !important;
+  color: #ffffff !important;
+}
+.score-toggle i { font-size: 14px; }
+
+.score-table {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.score-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 4px 0 10px;
+}
+.score-group-label.warn { color: #f87171; }
+.score-group-label.safe { color: #34d399; }
+.score-group-label:not(:first-child) { margin-top: 16px; }
+
+.score-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.score-row:last-of-type { border-bottom: none; }
+
+.score-points {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 38px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.score-points.add { color: #f87171; }
+.score-points.sub { color: #34d399; }
+
+.score-row-body { display: flex; flex-direction: column; gap: 3px; }
+.score-row-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+}
+.score-row-reason {
+  font-size: 11px;
+  color: rgba(255,255,255,0.38);
+  line-height: 1.5;
+}
+
+.score-total {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  font-size: 12px;
+  color: rgba(255,255,255,0.45);
+}
+.score-total strong {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.card-points {
+  margin-left: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.card-points.warn {
+  background: rgba(239,68,68,0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.card-points.caution {
+  background: rgba(245,158,11,0.15);
+  color: #fde68a;
+  border: 1px solid rgba(245,158,11,0.3);
+}
+.card-points.safe {
+  background: rgba(16,185,129,0.12);
+  color: #6ee7b7;
+  border: 1px solid rgba(16,185,129,0.3);
+}
+
+.metric-sub {
+  font-size: 13px;
+  color: rgba(255,255,255,0.4);
+  font-weight: 600;
+}

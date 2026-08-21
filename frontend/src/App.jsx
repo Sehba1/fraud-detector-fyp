@@ -111,17 +111,17 @@ function getRiskClass(tier) {
 }
 
 function getVerdictLabel(label, tier) {
-  if (label === "fraudulent" && tier === "high") return "LIKELY A SCAM";
+  if (label === "fraudulent" && tier === "high") return "MOST LIKELY A SCAM";
   if (label === "fraudulent" && tier === "medium") return "PROCEED WITH CAUTION";
-  return "LOOKS GENUINE";
+  return "LIKELY GENUINE";
 }
 
 function getVerdictSub(label, tier) {
   if (label === "fraudulent" && tier === "high")
-    return "This posting shows strong warning signs. Be very careful.";
+    return "This posting shows strong warning signs. Treat it with caution.";
   if (label === "fraudulent" && tier === "medium")
-    return "Some warning signs were detected. Take a closer look before you apply.";
-  return "No major red flags were found in this posting.";
+    return "Some warning signs were detected. Check carefully before applying.";
+  return "No major red flags were found, but this is not a guarantee.";
 }
 
 function getVerdictIcon(label, tier) {
@@ -137,7 +137,7 @@ function getAdvice(label, tier) {
       text: (
         <>
           <strong>Do not share your bank details, passport, or personal information.</strong>{" "}
-          This posting has the hallmarks of a job scam.
+          This posting shows several patterns commonly found in job scams.
         </>
       ),
     };
@@ -157,7 +157,7 @@ function getAdvice(label, tier) {
     icon: "ti-shield-check",
     text: (
       <>
-        This looks like a real job posting.{" "}
+        This posting shows the characteristics of a legitimate advertisement.{" "}
         <strong>Still verify the company independently</strong>, because our AI
         is not perfect and cannot check everything.
       </>
@@ -169,6 +169,15 @@ function getRiskBadgeLabel(tier) {
   if (tier === "high") return "HIGH RISK";
   if (tier === "medium") return "MEDIUM RISK";
   return "LOW RISK";
+}
+
+function displayPercent(p) {
+  // Capped so the interface never asserts absolute certainty. The
+  // underlying model probability is unchanged; only the display is capped.
+  const pct = p * 100;
+  if (pct >= 99.9) return "99.9";
+  if (pct > 0 && pct < 0.1) return "<0.1";
+  return pct.toFixed(1);
 }
 
 function strengthOf(weight, maxWeight) {
@@ -193,8 +202,26 @@ const PATTERN_ICONS = {
   formal_process: "ti-briefcase",
 };
 
+const LIME_REASON_ICONS = {
+  income: "ti-coins",
+  urgency: "ti-alarm",
+  financial_details: "ti-credit-card",
+  easy_work: "ti-home",
+  recruitment: "ti-speakerphone",
+  contact: "ti-phone",
+  qualifications: "ti-certificate",
+  role: "ti-list-check",
+  employment_terms: "ti-heart-handshake",
+  process: "ti-briefcase",
+  company: "ti-building",
+  other: "ti-puzzle",
+};
+
 function PatternCard({ category, tone }) {
   const icon = PATTERN_ICONS[category.id] || "ti-point";
+  const pct = category.model_attribution_pct;
+  const ignored = pct != null && pct === 0;
+
   return (
     <div className="reason-card">
       <div className="reason-head">
@@ -203,6 +230,7 @@ function PatternCard({ category, tone }) {
         </div>
         <span className="reason-title">{category.title}</span>
       </div>
+
       <div className="reason-chips">
         {category.detected.map((snippet) => (
           <span key={snippet} className={`word-chip ${tone}`}>
@@ -210,7 +238,103 @@ function PatternCard({ category, tone }) {
           </span>
         ))}
       </div>
+
+      {pct != null && (
+        <div className={`attrib-line ${ignored ? "ignored" : tone}`}>
+          <i
+            className={`ti ${ignored ? "ti-alert-circle" : "ti-brain"}`}
+            aria-hidden="true"
+          />
+          {ignored ? (
+            <span>
+              The AI model attributed <strong>0%</strong> of its decision to
+              these words.
+            </span>
+          ) : (
+            <span>
+              The AI model attributed <strong>{pct}%</strong> of its decision to
+              these words.
+            </span>
+          )}
+        </div>
+      )}
+
       <p className="pattern-explanation">{category.explanation}</p>
+    </div>
+  );
+}
+
+function LimeReasonCard({ group, tone }) {
+  const icon = LIME_REASON_ICONS[group.id] || "ti-point";
+  return (
+    <div className="reason-card">
+      <div className="reason-head">
+        <div className={`reason-icon ${tone}`}>
+          <i className={`ti ${icon}`} aria-hidden="true" />
+        </div>
+        <span className="reason-title">{group.title}</span>
+        <span className={`card-points ${tone}`}>{group.contribution_pct}%</span>
+      </div>
+      <div className="attrib-track">
+        <div
+          className={`attrib-fill ${tone}`}
+          style={{ width: `${Math.min(group.contribution_pct, 100)}%` }}
+        />
+      </div>
+      <div className="reason-chips">
+        {group.words.map((w) => (
+          <span
+            key={w.word}
+            className={`word-chip ${tone}`}
+            title={`LIME weight: ${w.weight}`}
+          >
+            {w.word}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LimeReasonsSection({ reasons, label, riskClass }) {
+  const tone =
+    label === "fraudulent"
+      ? riskClass === "medium"
+        ? "caution"
+        : "warn"
+      : "safe";
+  const bannerClass = label === "fraudulent" ? riskClass : "low";
+  const bannerIcon =
+    label === "fraudulent" ? "ti-alert-circle" : "ti-circle-check";
+
+  return (
+    <div className="result-section">
+      <div className="section-title">
+        <i className="ti ti-brain" aria-hidden="true" />
+        {reasons.heading}
+      </div>
+      <div className={`reasons-summary ${bannerClass}`}>
+        <i className={`ti ${bannerIcon}`} aria-hidden="true" />
+        <p>{reasons.summary}</p>
+      </div>
+      {reasons.groups.length > 0 ? (
+        <div className="reason-grid">
+          {reasons.groups.map((g) => (
+            <LimeReasonCard key={g.id} group={g} tone={tone} />
+          ))}
+        </div>
+      ) : (
+        <p className="counter-empty">
+          <i className="ti ti-info-circle" aria-hidden="true" />
+          No individual words carried enough measured weight to group.
+        </p>
+      )}
+      <p className="layer-note">
+        <i className="ti ti-info-circle" aria-hidden="true" />
+        These percentages are measured with LIME, which removes each word in
+        turn and records how far the model's output moves. They show what the
+        model actually responded to.
+      </p>
     </div>
   );
 }
@@ -220,6 +344,10 @@ function PatternAnalysisSection({ analysis, label, riskClass }) {
   const hasWarnings = analysis.warning.length > 0;
   const hasGenuine = analysis.genuine.length > 0;
   const warnBannerClass = riskClass === "low" ? "medium" : riskClass;
+
+  const ignoredWarnings = analysis.warning.filter(
+    (c) => c.model_attribution_pct === 0
+  );
 
   return (
     <>
@@ -239,12 +367,14 @@ function PatternAnalysisSection({ analysis, label, riskClass }) {
                 <PatternCard key={cat.id} category={cat} tone={warnTone} />
               ))}
             </div>
-            {label === "genuine" && (
+            {ignoredWarnings.length > 0 && (
               <p className="layer-note">
                 <i className="ti ti-info-circle" aria-hidden="true" />
-                These patterns appear in the text, but the AI model still judged
-                the overall posting as genuine. Review them yourself before
-                applying.
+                {ignoredWarnings.length === 1
+                  ? "One of these warning signs carried no weight in the model's decision."
+                  : `${ignoredWarnings.length} of these warning signs carried no weight in the model's decision.`}{" "}
+                They are shown because they are documented fraud indicators, even
+                though the model did not respond to them.
               </p>
             )}
           </>
@@ -257,10 +387,9 @@ function PatternAnalysisSection({ analysis, label, riskClass }) {
             {label === "fraudulent" && (
               <p className="layer-note">
                 <i className="ti ti-info-circle" aria-hidden="true" />
-                The AI model classified this posting as fraudulent from its
-                overall language, even though none of the known scam patterns
-                were matched. The AI decision tab shows what influenced the
-                model.
+                The model classified this posting as fraudulent from its overall
+                language, even though none of the known scam patterns were
+                matched. The AI decision tab shows what influenced it.
               </p>
             )}
           </>
@@ -364,12 +493,12 @@ function ResultsPanel({ result, inputText }) {
   const warnWords = result.explanation
     .filter((e) => e.weight > 0)
     .sort((a, b) => b.weight - a.weight)
-    .slice(0, 5);
+    .slice(0, 6);
 
   const safeWords = result.explanation
     .filter((e) => e.weight < 0)
     .sort((a, b) => a.weight - b.weight)
-    .slice(0, 5);
+    .slice(0, 6);
 
   const maxWeight = Math.max(
     ...result.explanation.map((e) => Math.abs(e.weight)),
@@ -414,7 +543,7 @@ function ResultsPanel({ result, inputText }) {
           <div className="verdict-metrics">
             <div>
               <span className="metric-val">
-                {(result.fraud_probability * 100).toFixed(1)}%
+                {displayPercent(result.fraud_probability)}%
               </span>
               <span className="metric-lbl">Scam chance</span>
             </div>
@@ -467,6 +596,14 @@ function ResultsPanel({ result, inputText }) {
 
         {view === "model" && (
           <div className="tab-pane">
+            {result.lime_reasons && (
+              <LimeReasonsSection
+                reasons={result.lime_reasons}
+                label={result.label}
+                riskClass={riskClass}
+              />
+            )}
+
             <div className="result-section">
               <div className="section-title">
                 <i className="ti ti-highlight" aria-hidden="true" />
@@ -494,7 +631,7 @@ function ResultsPanel({ result, inputText }) {
             <div className="result-section">
               <div className="section-title">
                 <i className="ti ti-chart-bar" aria-hidden="true" />
-                Word-by-word breakdown
+                Word-by-word evidence
               </div>
               <div className="signals-grid">
                 <div>
@@ -548,9 +685,11 @@ function ResultsPanel({ result, inputText }) {
               </div>
               <div className="signal-note">
                 <i className="ti ti-info-circle" aria-hidden="true" />
-                This shows how the AI model itself weighed each word when making
-                its decision. Longer bars mean a bigger impact. This is separate
-                from the Scam check tab.
+                This is the raw evidence behind the percentages above. Longer
+                bars mean the word had a bigger effect on the model's output.
+                {result.local_fidelity != null && (
+                  <> Local explanation fidelity: {result.local_fidelity}.</>
+                )}
               </div>
             </div>
           </div>
@@ -834,7 +973,7 @@ export default function App() {
                   <div className="scan-step">
                     <div className={`step-dot ${stepClass(2)}`} />
                     <span className={`step-text ${stepClass(2)}`}>
-                      Building the explanation for each word
+                      Measuring what influenced the decision
                     </span>
                   </div>
                 </div>

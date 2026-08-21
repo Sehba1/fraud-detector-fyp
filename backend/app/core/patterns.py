@@ -1,22 +1,29 @@
 """
-Rule-based scam pattern analysis for the Fraud Detector backend.
+Rule-based scam pattern detection for the Fraud Detector backend.
 
-This module is the knowledge-based half of the system's hybrid explanation
-framework. It scans the raw posting text for phrases and patterns that are
-documented indicators of recruitment fraud, and for indicators typical of
-legitimate job advertisements.
+This module detects documented recruitment-fraud indicators in the raw
+posting text. It is knowledge-based, not model-based: the phrase lists
+encode published scam indicators and consumer guidance, which is
+knowledge the trained model does not necessarily contain.
+
+It does NOT score or weight anything. Each detected category reports:
+
+  - the actual text snippets that matched, as evidence
+  - the share of the model's LIME attribution that fell on those words
+
+The second figure is measured from the model, not assigned here, so a
+category can be detected in the text while the model attributed nothing
+to it. That disagreement is displayed rather than hidden: it shows where
+the model's learned behaviour diverges from documented fraud indicators.
 
 Important design facts:
 
-  - This layer is completely independent of the BERT model and of LIME.
-    It never influences the prediction, the confidence, or the risk tier.
+  - Detection never influences the prediction, the confidence, or the
+    risk tier.
   - It runs on the RAW input text (or raw OCR output), lightly normalised
     to lowercase with collapsed whitespace. It does not use the BERT
     cleaning pipeline, because that pipeline strips digits and punctuation
     and would destroy patterns like "RM500/day" or phone numbers.
-  - Every category shown to the user carries the actual matched text
-    snippets as evidence, so nothing is asserted without proof from the
-    posting itself.
   - Negation handling: the layer performs surface pattern matching and
     does not understand negation in general. High-frequency negated
     phrases ("no experience required", "no interview", "do not apply
@@ -37,83 +44,6 @@ def _c(pattern: str):
 
 # ── Warning pattern categories ────────────────────────────────────────────────
 WARNING_CATEGORIES = [
-    {
-        "id": "external_contact",
-        "title": "Contact through unofficial channels",
-        "explanation": (
-            "This posting asks applicants to communicate through personal "
-            "messaging apps or direct phone contact instead of official "
-            "company recruitment channels, which is commonly observed in "
-            "recruitment scams."
-        ),
-        "patterns": [
-            _c(r"\btelegram\b"),
-            _c(r"\bwhats\s?app\b"),
-            _c(r"\bwechat\b"),
-            _c(r"\bviber\b"),
-            _c(r"\bdirect message\b"),
-            _c(r"\bdm (?:us|me)\b"),
-            _c(r"\btext (?:us|me) (?:at|on)\b"),
-            _c(r"(?:resume|cv) to\s*:?\s*\+?[\d\-\s]{7,}"),
-        ],
-    },
-    {
-        "id": "unrealistic_income",
-        "title": "Unrealistic income promises",
-        "explanation": (
-            "This posting promises unusually high or fast income with "
-            "little information about the work involved, a pattern "
-            "frequently used to lure victims."
-        ),
-        "patterns": [
-            _c(r"(?:rm|usd|\$)\s?\d[\d,]*\s?(?:/|per\s?|a\s?)day"),
-            _c(r"\bdaily (?:pay|payment|income|salary)\b"),
-            _c(r"\bweekly (?:pay|payment|payout)\b"),
-            _c(r"\beasy money\b"),
-            _c(r"\bfast cash\b"),
-            _c(r"\bquick money\b"),
-            _c(r"\bincome can reach\b"),
-            _c(r"\bunlimited income\b"),
-            _c(r"\bguaranteed income\b"),
-            _c(r"\bpassive income\b"),
-        ],
-    },
-    {
-        "id": "pressure",
-        "title": "Pressure and urgency tactics",
-        "explanation": (
-            "This posting uses urgency language that pushes applicants to "
-            "act quickly without proper verification."
-        ),
-        "patterns": [
-            _c(r"\burgent(?:ly)?\b"),
-            _c(r"\bimmediate(?:ly)? (?:hiring|joining|start)\b"),
-            _c(r"\bapply (?:now|today|tonight)\b"),
-            _c(r"\blimited (?:positions?|slots?|spots?|seats?|vacancies)\b"),
-            _c(r"\bhurry\b"),
-            _c(r"\bact fast\b"),
-            _c(r"\bfirst come,? first serve(?:d)?\b"),
-            _c(r"\btoday only\b"),
-        ],
-    },
-    {
-        "id": "low_requirements",
-        "title": "Suspiciously low entry requirements",
-        "explanation": (
-            "This posting advertises extremely low entry requirements, "
-            "which frequently appear in fraudulent recruitment "
-            "advertisements."
-        ),
-        "patterns": [
-            _c(r"\bno experience\b"),
-            _c(r"\bno interview\b"),
-            _c(r"\bno qualifications?\b"),
-            _c(r"\bno skills? (?:needed|required)\b"),
-            _c(r"\banyone can (?:apply|join|do)\b"),
-            _c(r"\bstudents? welcome\b"),
-            _c(r"\bno resume\b"),
-        ],
-    },
     {
         "id": "money_requests",
         "title": "Requests for money or financial details",
@@ -161,6 +91,83 @@ WARNING_CATEGORIES = [
         ],
     },
     {
+        "id": "unrealistic_income",
+        "title": "Unrealistic income promises",
+        "explanation": (
+            "This posting promises unusually high or fast income with "
+            "little information about the work involved, a pattern "
+            "frequently used to lure victims."
+        ),
+        "patterns": [
+            _c(r"(?:rm|usd|\$)\s?\d[\d,]*\s?(?:/|per\s?|a\s?)day"),
+            _c(r"\bdaily (?:pay|payment|income|salary)\b"),
+            _c(r"\bweekly (?:pay|payment|payout)\b"),
+            _c(r"\beasy money\b"),
+            _c(r"\bfast cash\b"),
+            _c(r"\bquick money\b"),
+            _c(r"\bincome can reach\b"),
+            _c(r"\bunlimited income\b"),
+            _c(r"\bguaranteed income\b"),
+            _c(r"\bpassive income\b"),
+        ],
+    },
+    {
+        "id": "external_contact",
+        "title": "Contact through unofficial channels",
+        "explanation": (
+            "This posting asks applicants to communicate through personal "
+            "messaging apps or direct phone contact instead of official "
+            "company recruitment channels, which is commonly observed in "
+            "recruitment scams."
+        ),
+        "patterns": [
+            _c(r"\btelegram\b"),
+            _c(r"\bwhats\s?app\b"),
+            _c(r"\bwechat\b"),
+            _c(r"\bviber\b"),
+            _c(r"\bdirect message\b"),
+            _c(r"\bdm (?:us|me)\b"),
+            _c(r"\btext (?:us|me) (?:at|on)\b"),
+            _c(r"(?:resume|cv) to\s*:?\s*\+?[\d\-\s]{7,}"),
+        ],
+    },
+    {
+        "id": "low_requirements",
+        "title": "Suspiciously low entry requirements",
+        "explanation": (
+            "This posting advertises extremely low entry requirements, "
+            "which frequently appear in fraudulent recruitment "
+            "advertisements."
+        ),
+        "patterns": [
+            _c(r"\bno experience\b"),
+            _c(r"\bno interview\b"),
+            _c(r"\bno qualifications?\b"),
+            _c(r"\bno skills? (?:needed|required)\b"),
+            _c(r"\banyone can (?:apply|join|do)\b"),
+            _c(r"\bstudents? welcome\b"),
+            _c(r"\bno resume\b"),
+        ],
+    },
+    {
+        "id": "pressure",
+        "title": "Pressure and urgency tactics",
+        "explanation": (
+            "This posting uses urgency language that pushes applicants to "
+            "act quickly without proper verification."
+        ),
+        "patterns": [
+            _c(r"\burgent(?:ly)?\b"),
+            _c(r"\bimmediate(?:ly)? (?:hiring|joining|start)\b"),
+            _c(r"\bapply (?:now|today|tonight)\b"),
+            _c(r"\blimited (?:positions?|slots?|spots?|seats?|vacancies)\b"),
+            _c(r"\bhurry\b"),
+            _c(r"\bact fast\b"),
+            _c(r"\bfirst come,? first serve(?:d)?\b"),
+            _c(r"\btoday only\b"),
+        ],
+    },
+    {
         "id": "targeting",
         "title": "Unprofessional or discriminatory targeting",
         "explanation": (
@@ -177,6 +184,62 @@ WARNING_CATEGORIES = [
 
 # ── Genuine pattern categories ────────────────────────────────────────────────
 GENUINE_CATEGORIES = [
+    {
+        "id": "benefits",
+        "title": "Standard employee benefits",
+        "explanation": (
+            "The posting lists realistic employee benefits typically "
+            "offered by legitimate companies."
+        ),
+        "patterns": [
+            _c(r"\bmedical\b"),
+            _c(r"\binsurance\b"),
+            _c(r"\bannual leave\b"),
+            _c(r"\bepf\b"),
+            _c(r"\bsocso\b"),
+            _c(r"\bdental\b"),
+            _c(r"\bperformance bonus\b"),
+            _c(r"\ballowances?\b"),
+            _c(r"\bpension\b"),
+        ],
+    },
+    {
+        "id": "formal_process",
+        "title": "Formal hiring process",
+        "explanation": (
+            "The posting describes a structured application and interview "
+            "process, which is characteristic of genuine employers."
+        ),
+        "patterns": [
+            _c(r"(?<!no )\binterviews?\b"),
+            _c(r"\bshortlisted\b"),
+            _c(r"\bresume\b"),
+            _c(r"\bcv\b"),
+            _c(r"\bassessment\b"),
+            _c(r"\bscreening\b"),
+            _c(r"(?<!not )\bapply through\b"),
+        ],
+    },
+    {
+        "id": "qualifications",
+        "title": "Professional qualifications required",
+        "explanation": (
+            "The posting specifies concrete qualifications, skills, or "
+            "experience, which scam postings rarely include."
+        ),
+        "patterns": [
+            _c(r"\bbachelor'?s?\b"),
+            _c(r"\bdegree\b"),
+            _c(r"\bdiploma\b"),
+            _c(r"\bmasters?\b"),
+            _c(r"\byears? of (?:professional |relevant |working )?experience\b"),
+            _c(r"(?<!no )\bexperience (?:required|in|with)\b"),
+            _c(r"\bproficien(?:t|cy)\b"),
+            _c(r"\bpython\b"),
+            _c(r"\bjava(?:script)?\b"),
+            _c(r"\bsql\b"),
+        ],
+    },
     {
         "id": "company_profile",
         "title": "Professional company presence",
@@ -208,62 +271,6 @@ GENUINE_CATEGORIES = [
             _c(r"\byou will (?:design|develop|manage|maintain|prepare|handle|support|work)\b"),
         ],
     },
-    {
-        "id": "benefits",
-        "title": "Standard employee benefits",
-        "explanation": (
-            "The posting lists realistic employee benefits typically "
-            "offered by legitimate companies."
-        ),
-        "patterns": [
-            _c(r"\bmedical\b"),
-            _c(r"\binsurance\b"),
-            _c(r"\bannual leave\b"),
-            _c(r"\bepf\b"),
-            _c(r"\bsocso\b"),
-            _c(r"\bdental\b"),
-            _c(r"\bperformance bonus\b"),
-            _c(r"\ballowances?\b"),
-            _c(r"\bpension\b"),
-        ],
-    },
-    {
-        "id": "qualifications",
-        "title": "Professional qualifications required",
-        "explanation": (
-            "The posting specifies concrete qualifications, skills, or "
-            "experience, which scam postings rarely include."
-        ),
-        "patterns": [
-            _c(r"\bbachelor'?s?\b"),
-            _c(r"\bdegree\b"),
-            _c(r"\bdiploma\b"),
-            _c(r"\bmasters?\b"),
-            _c(r"\byears? of (?:professional |relevant |working )?experience\b"),
-            _c(r"(?<!no )\bexperience (?:required|in|with)\b"),
-            _c(r"\bproficien(?:t|cy)\b"),
-            _c(r"\bpython\b"),
-            _c(r"\bjava(?:script)?\b"),
-            _c(r"\bsql\b"),
-        ],
-    },
-    {
-        "id": "formal_process",
-        "title": "Formal hiring process",
-        "explanation": (
-            "The posting describes a structured application and interview "
-            "process, which is characteristic of genuine employers."
-        ),
-        "patterns": [
-            _c(r"(?<!no )\binterviews?\b"),
-            _c(r"\bshortlisted\b"),
-            _c(r"\bresume\b"),
-            _c(r"\bcv\b"),
-            _c(r"\bassessment\b"),
-            _c(r"\bscreening\b"),
-            _c(r"(?<!not )\bapply through\b"),
-        ],
-    },
 ]
 
 
@@ -272,11 +279,44 @@ def _normalise(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").lower()).strip()
 
 
-def _scan(text: str, categories) -> list:
+def _attribution_for_snippets(snippets, lime_index, lime_total):
+    """
+    Measure how much of the model's LIME attribution fell on the words
+    inside these matched snippets.
+
+    Returns (percentage_of_total_attribution, list_of_matched_lime_words).
+
+    A category can match text while the model attributed nothing to it.
+    In that case this returns 0.0, which is a real finding and is
+    displayed rather than hidden.
+    """
+    if not lime_index or lime_total == 0:
+        return None, []
+
+    seen = {}
+    for snippet in snippets:
+        for token in re.findall(r"[a-z]+", snippet.lower()):
+            if token in lime_index and token not in seen:
+                seen[token] = lime_index[token]
+
+    if not seen:
+        return 0.0, []
+
+    weight_sum = sum(abs(v["weight"]) for v in seen.values())
+    words = [
+        {"word": v["word"], "weight": v["weight"]}
+        for v in seen.values()
+    ]
+    words.sort(key=lambda w: abs(w["weight"]), reverse=True)
+    return round(weight_sum / lime_total * 100, 1), words
+
+
+def _scan(text, categories, lime_index, lime_total):
     """
     Run every category's patterns against the text. A category is included
     only if at least one pattern matched, and it carries the actual matched
-    snippets (deduplicated, capped at 6) as evidence.
+    snippets as evidence plus the model's measured attribution for those
+    words.
     """
     results = []
     for cat in categories:
@@ -291,26 +331,48 @@ def _scan(text: str, categories) -> list:
             if len(detected) >= 6:
                 break
         if detected:
+            pct, words = _attribution_for_snippets(
+                detected, lime_index, lime_total
+            )
             results.append({
                 "id": cat["id"],
                 "title": cat["title"],
                 "detected": detected,
                 "explanation": cat["explanation"],
+                "model_attribution_pct": pct,
+                "model_words": words,
             })
     return results
 
 
-def analyse_posting(text: str) -> dict:
+def analyse_posting(text, lime_explanation=None):
     """
-    Analyse the raw posting text for known scam and genuine patterns.
+    Detect known scam and genuine patterns in the raw posting text, and
+    report how much of the model's attribution fell on the detected words.
 
-    Returns a dictionary with warning categories, genuine categories, and
-    templated summary sentences for each side. Completely independent of
-    the model prediction.
+    Args:
+        text: the raw posting text (or raw OCR output).
+        lime_explanation: optional list of {"word", "weight"} from LIME.
+            When supplied, each detected category reports the share of
+            total model attribution that landed on its matched words.
+            When absent, attribution figures are None.
+
+    Detection is knowledge-based and never influences the prediction.
+    Attribution figures are measured from the model.
     """
     t = _normalise(text)
-    warning = _scan(t, WARNING_CATEGORIES)
-    genuine = _scan(t, GENUINE_CATEGORIES)
+
+    lime_index = {}
+    lime_total = 0.0
+    if lime_explanation:
+        for item in lime_explanation:
+            key = item["word"].lower()
+            if key not in lime_index:
+                lime_index[key] = item
+        lime_total = sum(abs(i["weight"]) for i in lime_explanation)
+
+    warning = _scan(t, WARNING_CATEGORIES, lime_index, lime_total)
+    genuine = _scan(t, GENUINE_CATEGORIES, lime_index, lime_total)
 
     if warning:
         if len(warning) == 1:

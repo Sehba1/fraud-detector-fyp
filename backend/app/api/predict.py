@@ -4,11 +4,19 @@ Prediction endpoints for the Fraud Detector API.
 POST /predict/text  — analyse a text job posting
 POST /predict/image — analyse an image/screenshot of a job posting
 
-Each request runs two independent explanation layers:
-  1. LIME word-level attributions (model explanation), from app.models.xai
-  2. Rule-based scam pattern analysis (content analysis), from
-     app.core.patterns, which runs on the RAW text before cleaning and
-     never influences the prediction.
+Each request produces two complementary explanations:
+
+  1. LIME attributions (model explanation), from app.models.xai. These
+     measure what the model actually responded to, grouped by vocabulary
+     with each group's share of total attribution.
+
+  2. Rule-based pattern detection, from app.core.patterns. This detects
+     documented fraud indicators in the RAW text, knowledge the model does
+     not necessarily contain, and reports how much of the model's
+     attribution fell on each detected phrase.
+
+The LIME step runs FIRST so its attributions can be passed into the
+pattern detector. Pattern detection never influences the prediction.
 """
 
 import json
@@ -38,15 +46,13 @@ def _run_prediction_pipeline(
     """
     Shared pipeline for both text and image endpoints.
 
-    Order matters: the pattern analysis runs on the raw text FIRST,
-    because the BERT cleaning step strips digits and punctuation, which
-    would destroy patterns like "RM500/day" or phone numbers. The model
-    then receives the cleaned text exactly as before.
+    Order matters twice over. The model receives CLEANED text, as it
+    always has. Pattern detection receives the RAW text, because the
+    cleaning step strips digits and punctuation and would destroy
+    patterns like "RM500/day" or phone numbers. And the LIME step runs
+    before pattern detection so its attributions can be passed in.
     """
-    # Step 1: Rule-based pattern analysis on the raw posting text
-    pattern_result = analyse_posting(raw_text)
-
-    # Step 2: Clean text for the model
+    # Step 1: Clean text for the model
     cleaned = clean_text(raw_text)
     if not cleaned:
         raise HTTPException(
@@ -55,13 +61,21 @@ def _run_prediction_pipeline(
                    "more detailed job posting."
         )
 
-    # Step 3: Predict and explain (LIME layer; includes the prediction)
+    # Step 2: Predict and explain (LIME layer; includes the prediction)
     explanation_result = explain_prediction(cleaned, num_features=LIME_NUM_FEATURES)
+
+    # Step 3: Pattern detection on the raw text, informed by the model's
+    # measured attributions so each detected category can report how much
+    # the model actually weighted it.
+    pattern_result = analyse_posting(
+        raw_text,
+        lime_explanation=explanation_result["explanation"],
+    )
 
     # Step 4: Risk tier
     risk = get_risk_tier(explanation_result["fraud_probability"])
 
-    # Step 5: Save to database (both layers stored for auditability)
+    # Step 5: Save to database (both explanation layers stored for auditability)
     submission = Submission(
         input_type=input_type,
         raw_input=ocr_raw if ocr_raw else raw_text,
@@ -85,6 +99,8 @@ def _run_prediction_pipeline(
         method="lime+patterns",
         top_features_json=json.dumps({
             "explanation": explanation_result["explanation"],
+            "lime_reasons": explanation_result["lime_reasons"],
+            "local_fidelity": explanation_result["local_fidelity"],
             "pattern_analysis": pattern_result,
         }),
     )
@@ -98,6 +114,8 @@ def _run_prediction_pipeline(
         fraud_probability=explanation_result["fraud_probability"],
         risk_tier=risk,
         explanation=explanation_result["explanation"],
+        lime_reasons=explanation_result["lime_reasons"],
+        local_fidelity=explanation_result["local_fidelity"],
         pattern_analysis=pattern_result,
         input_type=input_type,
         ocr_text=ocr_raw,
@@ -113,8 +131,9 @@ async def predict_text(
     Analyse a text job posting for fraud.
 
     Accepts raw or HTML job posting text.
-    Returns label, confidence, risk tier, rule-based pattern analysis of
-    the content, and word-level LIME evidence for the model's decision.
+    Returns label, confidence, risk tier, the model's grouped LIME
+    reasoning, and rule-based pattern detections with the model's
+    measured attribution for each.
     """
     return _run_prediction_pipeline(
         raw_text=request.text,
