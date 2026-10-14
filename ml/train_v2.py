@@ -52,14 +52,14 @@ from transformers import (
 # ── Configuration ─────────────────────────────────────────────────────────────
 MODEL_NAME = "bert-base-uncased"
 MAX_LENGTH = 512
-EPOCHS = 4
+EPOCHS = 2
 BATCH_SIZE = 16
-LEARNING_RATE = 2e-5
+LEARNING_RATE = 1e-5
 SEED = 42
 
 # How many times each augmented example is repeated in the training set.
 # See the module docstring for the rationale.
-AUGMENT_REPEAT = 8
+AUGMENT_REPEAT = 3
 
 OUTPUT_DIR = "bert_fraud_detector_v2"
 
@@ -114,6 +114,18 @@ print(f"  EMSCAD val:   {len(val_texts)} "
 
 print("\nLoading augmented data...")
 aug_rows = load_jsonl("augmented_train.jsonl")
+
+# Contrastive pairs: genuine postings and near-identical fraudulent twins
+# differing only by one injected scam signal. These force the model to
+# learn the signal itself rather than separating classes on tone or
+# structure. See ml/generate_contrastive.py for the rationale.
+contrastive_rows = []
+if os.path.exists("contrastive_train.jsonl"):
+    contrastive_rows = load_jsonl("contrastive_train.jsonl")
+    print(f"  Contrastive pairs loaded:  {len(contrastive_rows)}")
+    aug_rows = aug_rows + contrastive_rows
+else:
+    print("  No contrastive file found, continuing without it.")
 
 aug_texts = []
 aug_labels = []

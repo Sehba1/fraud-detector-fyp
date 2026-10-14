@@ -42,8 +42,25 @@ async def lifespan(app: FastAPI):
         print("All model paths verified.")
 
     # Initialize database tables
+       # Initialize database tables
     init_db()
     print("Database ready.")
+
+    # Warm up the model and XAI once, at startup, so the first /predict request
+    # does not pay the cold BERT build inline. Nothing here changes any XAI
+    # value; it only moves the existing one-time loading from request time to
+    # boot time.
+    print("Warming up V3 model and XAI backgrounds...")
+    try:
+        import app.models.multitask_infer as mi
+        from app.models.faithful_xai import _load_backgrounds
+        mi._load()                      # build MultiTaskBert + load V3 weights once (cached)
+        _load_backgrounds()             # cache the 10 genuine backgrounds once
+        mi.multitask_fraud_prob("warm up", clean_fn=None)  # JIT the forward path
+        print("Warm-up complete. Model and backgrounds are cached.")
+    except Exception as e:
+        print(f"WARNING: warm-up failed ({e}); model will load lazily on first request.")
+
     print("API running — visit http://localhost:8000/docs for interactive docs.")
 
     yield  # server runs here

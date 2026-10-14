@@ -13,7 +13,7 @@ PROJECT_ROOT = BACKEND_DIR.parent
 
 # ── Model paths ───────────────────────────────────────────────────────────────
 BERT_MODEL_PATH = str(
-    PROJECT_ROOT / "ml" / "saved_models" / "bert_fraud_detector"
+    PROJECT_ROOT / "ml" / "saved_models" / "bert_fraud_detector_multitask_v3"
 )
 BASELINE_MODEL_PATH = str(
     PROJECT_ROOT / "ml" / "saved_models" / "baseline_random_forest.joblib"

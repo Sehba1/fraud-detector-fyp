@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "FraudLens — Job Scam Checker",
+  "version": "1.2.0",
+  "description": "Analyse the job posting on the current page with FraudLens, without copy-pasting.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://localhost:8000/*", "http://127.0.0.1:8000/*"],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "FraudLens — Check this job"
+  }
+}

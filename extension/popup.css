@@ -1,0 +1,69 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0b0f17; --panel: #121826; --panel2: #1a2233; --line: rgba(255,255,255,0.09);
+  --text: #f0f2f5; --muted: #9aa4b4; --accent: #1f4e79; --accent2: #2ea3f2;
+  --warn: #e5484d; --caution: #f5a623; --ok: #12a594;
+}
+body { width: 360px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px; }
+.wrap { padding: 14px; }
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.xsmall { font-size: 11px; }
+
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.logo { width: 26px; height: 26px; border-radius: 7px; flex: 0 0 auto;
+  background: linear-gradient(135deg, var(--accent2), var(--accent)); }
+.brand-name { font-weight: 800; letter-spacing: 0.02em; }
+.brand-sub { font-size: 11px; color: var(--muted); }
+
+.detected { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 11px; margin-bottom: 10px; }
+.detected-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.detected-title { font-weight: 600; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detected-host { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+.primary-btn { width: 100%; padding: 11px; border: none; border-radius: 9px; cursor: pointer;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; transition: background .15s; }
+.primary-btn:hover { background: #2a5f92; }
+.ghost-btn { width: 100%; padding: 9px; margin-top: 10px; border: 1px solid var(--line);
+  border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; font-weight: 600; }
+.ghost-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+
+.panel { margin-top: 12px; }
+.spinner { width: 26px; height: 26px; border: 3px solid var(--line); border-top-color: var(--accent2);
+  border-radius: 50%; animation: spin .8s linear infinite; margin: 6px auto 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.assist-title, .error-title { font-weight: 700; margin-bottom: 6px; }
+.error-title { color: var(--warn); }
+textarea { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 9px; padding: 9px; font-size: 13px; resize: vertical; margin: 6px 0; font-family: inherit; }
+
+.score-row { display: flex; align-items: center; justify-content: space-between;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.score-pct { font-size: 30px; font-weight: 800; line-height: 1; }
+.chip { padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 800; letter-spacing: 0.03em; }
+.chip.low { background: rgba(18,163,148,0.16); color: #4fd6bf; }
+.chip.medium { background: rgba(245,166,35,0.16); color: var(--caution); }
+.chip.high { background: rgba(229,72,77,0.16); color: #ff6b6f; }
+
+.block { margin-top: 12px; }
+.block-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 6px; }
+.factors { display: flex; flex-direction: column; gap: 6px; }
+.factor { display: flex; align-items: center; gap: 8px; }
+.factor-name { flex: 1 1 auto; font-size: 13px; }
+.factor-val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent2); }
+.bar { height: 6px; border-radius: 4px; background: var(--panel2); overflow: hidden; margin-top: 3px; }
+.bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); }
+
+.rules { display: flex; flex-direction: column; gap: 5px; }
+.rule { display: flex; gap: 7px; align-items: flex-start; background: rgba(229,72,77,0.06);
+  border: 1px solid rgba(229,72,77,0.28); border-radius: 8px; padding: 7px 9px; font-size: 12px; }
+.rule.ok { background: rgba(18,163,148,0.06); border-color: rgba(18,163,148,0.28); }
+.rule-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-top: 5px; flex: 0 0 auto; }
+.rule.ok .rule-dot { background: var(--ok); }
+
+#src-note { margin-top: 10px; }
+.foot { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line); text-align: center; }

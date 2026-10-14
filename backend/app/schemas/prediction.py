@@ -1,127 +1,167 @@
 """
 Pydantic request and response schemas for the prediction endpoints.
-FastAPI uses these for automatic validation, serialization, and API docs.
 """
 
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
 
-# ── Request schemas ───────────────────────────────────────────────────────────
-
 class TextPredictionRequest(BaseModel):
     text: str = Field(
         ...,
         min_length=10,
         description="Job posting text to analyse for fraud.",
-        examples=["We are hiring urgently. Work from home. Send bank details to apply."],
     )
 
-
-# ── Sub-schemas used inside responses ────────────────────────────────────────
 
 class ExplanationItem(BaseModel):
     word: str = Field(description="Word or token from the posting.")
     weight: float = Field(
-        description="LIME weight. Positive means fraud signal, negative means genuine signal."
+        description="LIME weight. Positive means fraud signal, negative means genuine."
     )
 
 
 class ReasonGroup(BaseModel):
-    id: str = Field(description="Stable identifier for this vocabulary group.")
-    title: str = Field(description="Human-readable group title.")
-    words: List[ExplanationItem] = Field(
-        description="LIME features from this prediction that belong to this group."
-    )
-    attribution: float = Field(
-        description="Sum of absolute LIME weights for this group's words."
-    )
-    contribution_pct: float = Field(
-        description="This group's share of the model's total measured attribution, "
-                    "as a percentage."
-    )
+    id: str
+    title: str
+    words: List[ExplanationItem]
+    attribution: float
+    contribution_pct: float
 
 
 class LimeReasons(BaseModel):
-    heading: str = Field(description="Section heading for the model's reasoning.")
-    summary: str = Field(
-        description="One-sentence summary of the model's measured attribution."
+    heading: str
+    summary: str
+    groups: List[ReasonGroup]
+
+
+class OcclusionItem(BaseModel):
+    sentence: str = Field(description="The sentence that was removed.")
+    impact_points: float = Field(
+        description="Change in fraud score, in percentage points, when this "
+                    "sentence is removed. Positive means the sentence was "
+                    "pushing the score up."
     )
-    groups: List[ReasonGroup] = Field(
-        description="LIME features grouped by vocabulary, ordered by measured "
-                    "contribution."
+    score_without_pct: float = Field(
+        description="The fraud score when this sentence is removed."
     )
+    share_pct: float = Field(
+        description="This sentence's share of all measured movement."
+    )
+
+
+class Occlusion(BaseModel):
+    available: bool = Field(
+        description="False when the posting is too short to analyse."
+    )
+    reason: Optional[str] = None
+    baseline_pct: Optional[float] = Field(
+        default=None, description="Fraud score on the complete posting."
+    )
+    sentences_tested: Optional[int] = None
+    raises: List[OcclusionItem] = Field(
+        default_factory=list,
+        description="Sentences whose removal lowered the score, so they were "
+                    "pushing the posting towards fraud."
+    )
+    lowers: List[OcclusionItem] = Field(
+        default_factory=list,
+        description="Sentences whose removal raised the score, so they were "
+                    "pushing the posting towards genuine."
+    )
+
+
+
+class ScoreBreakdownStep(BaseModel):
+    sentence: str = Field(description="The factor (sentence) added at this step.")
+    step_points: float = Field(
+        description="How many percentage points this factor adds to the score, "
+                    "measured by removing it from what remains at this step."
+    )
+    score_after_pct: float = Field(
+        description="The running score once this factor is included."
+    )
+
+
+class ScoreBreakdown(BaseModel):
+    available: bool = Field(
+        description="False when the posting is too short to break down."
+    )
+    reason: Optional[str] = None
+    final_pct: Optional[float] = Field(
+        default=None, description="The model's fraud score on the full posting."
+    )
+    floor_pct: Optional[float] = Field(
+        default=None,
+        description="The score that remains once every measured factor is "
+                    "removed: the model's baseline suspicion on the remainder. "
+                    "floor_pct + sum(step_points) equals final_pct within rounding."
+    )
+    steps: List[ScoreBreakdownStep] = Field(
+        default_factory=list,
+        description="Factors ordered biggest-first, each with its measured step."
+    )
+    sentences_tested: Optional[int] = None
+
+class SignalFactor(BaseModel):
+    id: str
+    title: str
+    points: float
+    words: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(default_factory=list)
+
+
+class SignalBreakdown(BaseModel):
+    available: bool
+    reason: Optional[str] = None
+    final_pct: Optional[float] = None
+    reference_pct: Optional[float] = None
+    reconstruct_pct: Optional[float] = None
+    truncated: Optional[bool] = None
+    flagged: List[SignalFactor] = Field(default_factory=list)
+    stylistic: Optional[SignalFactor] = None
+    weak_explanation: Optional[bool] = None
 
 
 class PatternCategory(BaseModel):
-    id: str = Field(description="Stable identifier for this pattern category.")
-    title: str = Field(description="Human-readable category title.")
-    detected: List[str] = Field(
-        description="Actual text snippets from the posting that matched this category."
-    )
-    explanation: str = Field(
-        description="Plain-language explanation of why this pattern matters."
-    )
-    model_attribution_pct: Optional[float] = Field(
-        default=None,
-        description="Share of the model's total LIME attribution that fell on the "
-                    "words in this category's matched snippets. Zero means the "
-                    "pattern is present in the text but the model did not respond "
-                    "to it."
-    )
-    model_words: List[ExplanationItem] = Field(
-        default_factory=list,
-        description="The LIME features underlying this category's attribution figure."
-    )
+    id: str
+    title: str
+    detected: List[str]
+    explanation: str
+    model_attribution_pct: Optional[float] = None
+    model_words: List[ExplanationItem] = Field(default_factory=list)
 
 
 class PatternAnalysis(BaseModel):
-    warning: List[PatternCategory] = Field(
-        description="Scam warning pattern categories found in the posting."
-    )
-    genuine: List[PatternCategory] = Field(
-        description="Legitimate-posting pattern categories found in the posting."
-    )
-    warning_summary: str = Field(
-        description="One-sentence summary of the warning side."
-    )
-    genuine_summary: str = Field(
-        description="One-sentence summary of the genuine side."
-    )
+    warning: List[PatternCategory]
+    genuine: List[PatternCategory]
+    warning_summary: str
+    genuine_summary: str
 
-
-# ── Response schemas ──────────────────────────────────────────────────────────
 
 class PredictionResponse(BaseModel):
-    label: str = Field(description="'fraudulent' or 'genuine'.")
-    confidence: float = Field(description="Probability of the predicted class (0-1).")
-    fraud_probability: float = Field(description="Raw fraud class probability (0-1).")
-    risk_tier: str = Field(description="'low', 'medium', or 'high'.")
-    explanation: List[ExplanationItem] = Field(
-        description="Filtered word-level LIME evidence (model explanation)."
+    label: str
+    confidence: float
+    fraud_probability: float
+    risk_tier: str
+    explanation: List[ExplanationItem]
+    lime_reasons: LimeReasons
+    local_fidelity: Optional[float] = None
+    occlusion: Occlusion = Field(
+        description="Sentence-level contributions measured by removing each "
+                    "sentence and re-running the model."
     )
-    lime_reasons: LimeReasons = Field(
-        description="LIME attributions grouped by vocabulary, with each group's "
-                    "measured share of the model's decision."
+    score_breakdown: ScoreBreakdown = Field(
+        description="Cumulative breakdown that climbs from a baseline floor to "
+                    "the final score; the per-factor steps sum to the score."
     )
-    local_fidelity: Optional[float] = Field(
-        default=None,
-        description="R-squared of the LIME surrogate model, indicating how faithfully "
-                    "the word-level explanation approximates the model's local behaviour."
-    )
-    pattern_analysis: PatternAnalysis = Field(
-        description="Rule-based detection of documented fraud indicators, each "
-                    "reporting the model's measured attribution. Detection never "
-                    "influences the prediction."
-    )
-    input_type: str = Field(description="'text' or 'image'.")
-    ocr_text: Optional[str] = Field(
-        default=None,
-        description="Raw OCR-extracted text (only present for image submissions)."
-    )
+    pattern_analysis: PatternAnalysis
+    signal_breakdown: SignalBreakdown
+    input_type: str
+    ocr_text: Optional[str] = None
 
 
 class HealthResponse(BaseModel):
-    status: str = Field(description="'ok' if the API is running correctly.")
-    model_loaded: bool = Field(description="Whether the BERT model is loaded.")
-    version: str = Field(description="API version string.")
+    status: str
+    model_loaded: bool
+    version: str

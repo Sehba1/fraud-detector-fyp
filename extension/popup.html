@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="popup.css" />
+  <title>FraudLens</title>
+</head>
+<body>
+  <div class="wrap">
+    <header class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <div class="brand-name">FraudLens</div>
+        <div class="brand-sub">Job scam checker</div>
+      </div>
+    </header>
+
+    <div id="detected" class="detected">
+      <div class="detected-label">Current page</div>
+      <div id="page-title" class="detected-title">—</div>
+      <div id="page-host" class="detected-host"></div>
+    </div>
+
+    <button id="check-btn" class="primary-btn" type="button">Check this job</button>
+
+    <!-- loading -->
+    <section id="loading" class="panel hidden">
+      <div class="spinner" aria-hidden="true"></div>
+      <div id="loading-msg" class="muted">Extracting the job posting…</div>
+    </section>
+
+    <!-- user-assist fallback -->
+    <section id="assist" class="panel hidden">
+      <div class="assist-title">Couldn't confidently find the job description</div>
+      <p class="muted small">
+        Select the job-description text on the page and click again, or paste it here:
+      </p>
+      <textarea id="assist-text" rows="6" placeholder="Paste the job description…"></textarea>
+      <button id="assist-btn" class="primary-btn" type="button">Analyse pasted text</button>
+    </section>
+
+    <!-- error -->
+    <section id="error" class="panel hidden">
+      <div class="error-title" id="error-title">Something went wrong</div>
+      <p class="muted small" id="error-msg"></p>
+      <button id="retry-btn" class="ghost-btn" type="button">Try again</button>
+    </section>
+
+    <!-- result -->
+    <section id="result" class="panel hidden">
+      <div class="score-row">
+        <div>
+          <div id="score-pct" class="score-pct">—</div>
+          <div class="muted small">Scam probability</div>
+        </div>
+        <span id="risk-chip" class="chip">—</span>
+      </div>
+
+      <div id="factors-wrap" class="block hidden">
+        <div class="block-title">Top model factors</div>
+        <div id="factors" class="factors"></div>
+      </div>
+
+      <div id="rules-wrap" class="block hidden">
+        <div class="block-title">Rule-based checks</div>
+        <div id="rules" class="rules"></div>
+      </div>
+
+      <div id="src-note" class="muted xsmall"></div>
+      <button id="again-btn" class="ghost-btn" type="button">Check another</button>
+    </section>
+
+    <footer class="foot">
+      <span class="muted xsmall">Backend: <span id="backend">localhost:8000</span></span>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

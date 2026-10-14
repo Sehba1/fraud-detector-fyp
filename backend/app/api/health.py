@@ -18,7 +18,7 @@ async def health_check():
     Used to verify the API is running correctly before sending predictions.
     """
     model_loaded = os.path.exists(
-        os.path.join(BERT_MODEL_PATH, "model.safetensors")
+        os.path.join(BERT_MODEL_PATH, "multitask_model.pt")
     )
     return HealthResponse(
         status="ok",

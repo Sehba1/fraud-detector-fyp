@@ -24,12 +24,21 @@ Important design facts:
     to lowercase with collapsed whitespace. It does not use the BERT
     cleaning pipeline, because that pipeline strips digits and punctuation
     and would destroy patterns like "RM500/day" or phone numbers.
-  - Negation handling: the layer performs surface pattern matching and
-    does not understand negation in general. High-frequency negated
-    phrases ("no experience required", "no interview", "do not apply
-    through") are explicitly guarded with negative lookbehinds so they do
-    not fire as genuine signals. The general limitation is documented in
-    the project report.
+  - Negation handling. Two mechanisms coexist:
+      1. Fixed-width negative lookbehinds embedded in a handful of
+         GENUINE patterns (e.g. (?<!no )\binterviews?\b), preserved for
+         backward compatibility.
+      2. A sentence-scoped negation filter for warning categories that
+         match noun-phrase scam signals a legitimate posting commonly
+         disclaims — money_requests ("no registration fee", "we do not
+         charge a processing fee") and identity_requests ("we never ask
+         applicants for their bank details"). Those categories carry
+         `"negation_sensitive": True` and every match in them is dropped
+         when a negator token appears in the same sentence, within
+         `_NEG_WINDOW` tokens immediately preceding the match.
+    Categories that MATCH ON NEGATION BY DESIGN — notably
+    low_requirements ("no experience", "no interview") — are NOT marked
+    negation-sensitive and are unaffected.
   - The pattern list is a maintained knowledge base. It is expected to
     grow as new scam variants are encountered; advance-fee "membership
     fee" offer-letter scams were added after one was observed in testing.
@@ -42,11 +51,98 @@ def _c(pattern: str):
     return re.compile(pattern)
 
 
+# ── Sentence-scoped negation filter ──────────────────────────────────────────
+# Some warning categories match noun-phrase scam signals — a demand for a fee,
+# a deposit, bank details, an ID document — that legitimate postings routinely
+# disclaim ("no registration fee", "we do not ask for bank details", "we never
+# require your passport"). Without negation handling those disclaimers falsely
+# fire as warnings. Other categories match on negation BY DESIGN
+# (low_requirements: "no experience", "no interview") and MUST NOT be filtered.
+# The filter is therefore opt-in per category via `negation_sensitive: True`.
+#
+# For opted-in matches we look inside the sentence containing the match at the
+# `_NEG_WINDOW` tokens immediately preceding it, and drop the match when any
+# of those tokens is a negator. This is surface negation, not full NLP: it
+# introduces no new dependency and its scope is small and predictable.
+
+_SENT_DELIMS = ".!?\n"
+_NEG_WINDOW = 6
+_SIMPLE_NEGATORS = frozenset({
+    "no", "not", "never", "without", "cannot", "none", "neither", "nor",
+})
+_CONTRACTION_NEG = re.compile(r"n['’]t$")
+_TOKENIZE = re.compile(r"[a-z][a-z'’]*")
+
+
+def _prev_sentence_start(text: str, pos: int) -> int:
+    """First-char index of the sentence containing `pos`."""
+    best = -1
+    for ch in _SENT_DELIMS:
+        i = text.rfind(ch, 0, pos)
+        if i > best:
+            best = i
+    return best + 1 if best >= 0 else 0
+
+
+def _is_negated(text: str, match_start: int) -> bool:
+    """
+    True when a negator occurs within `_NEG_WINDOW` tokens immediately
+    preceding `match_start` in the same sentence.
+
+    Handles:
+      no / not / never / without / cannot / none / neither / nor
+      contractions ending in n't (don't, doesn't, won't, didn't, isn't, ...)
+
+    Sentence scope means a negator in one sentence does NOT suppress a
+    match in a different sentence: "No registration fee. Pay a joining fee."
+    keeps `joining fee` detected.
+    """
+    sent_start = _prev_sentence_start(text, match_start)
+    prefix = text[sent_start:match_start]
+    tokens = _TOKENIZE.findall(prefix.lower())
+    for tok in tokens[-_NEG_WINDOW:]:
+        if tok in _SIMPLE_NEGATORS:
+            return True
+        if _CONTRACTION_NEG.search(tok):
+            return True
+    return False
+
+
+# ── Money-context anchor for ambiguous asset terms ───────────────────────────
+# `bitcoin` / `usdt` / `crypto(currency)` are legitimate domain terminology in
+# fintech and blockchain postings ("cryptocurrency exchange", "crypto
+# ecosystem") and are NOT, on their own, a request for the applicant's money.
+# They are only treated as a money-request warning when the SAME sentence also
+# contains a payment-action word. Generic; no company- or posting-specific
+# exceptions, and every other pattern is untouched.
+_MONEY_CONTEXT = re.compile(
+    r"\b(?:pay|paid|payment|payments|payable|send|deposit|deposits|transfer|"
+    r"transfers|wire|fee|fees|charge|charges|purchase|buy|invest|investment|"
+    r"investing|wallet|remit)\b"
+)
+
+
+def _sentence_span(text: str, pos: int) -> str:
+    """The sentence containing `pos`, used to require a money-context anchor in
+    the same sentence as an ambiguous asset term."""
+    start = _prev_sentence_start(text, pos)
+    end = len(text)
+    for ch in _SENT_DELIMS:
+        i = text.find(ch, pos)
+        if i != -1 and i < end:
+            end = i
+    return text[start:end]
+
+
 # ── Warning pattern categories ────────────────────────────────────────────────
 WARNING_CATEGORIES = [
     {
         "id": "money_requests",
         "title": "Requests for money or financial details",
+        # Negation-sensitive: legitimate postings routinely explicitly
+        # disclaim these ("no registration fee", "we do not charge a
+        # processing fee", "we never ask for bank details").
+        "negation_sensitive": True,
         "explanation": (
             "This posting asks for a fee, payment, or banking details. "
             "Legitimate employers do not ask applicants to pay to secure "
@@ -68,15 +164,24 @@ WARNING_CATEGORIES = [
             _c(r"\bbank (?:details?|account|information)\b"),
             _c(r"\bupfront (?:payment|fee)\b"),
             _c(r"\btop.?up\b"),
+            _c(r"\binvestment (?:opportunity|plan|scheme|return)\b"),
+        ],
+        # Ambiguous crypto/asset terms: counted only when the same sentence
+        # also contains a payment-action word (see _MONEY_CONTEXT). Legitimate
+        # blockchain/fintech postings that merely mention cryptocurrency as
+        # domain terminology no longer trigger a money-request warning.
+        "context_anchored_patterns": [
             _c(r"\bbitcoin\b"),
             _c(r"\busdt\b"),
             _c(r"\bcrypto(?:currency)?\b"),
-            _c(r"\binvestment (?:opportunity|plan|scheme|return)\b"),
         ],
     },
     {
         "id": "identity_requests",
         "title": "Personal identity information requests",
+        # Negation-sensitive: "we do not require your passport", "we never
+        # ask applicants for personal details".
+        "negation_sensitive": True,
         "explanation": (
             "This posting asks for identity documents or personal "
             "information early in the process, which is a common tactic in "
@@ -134,6 +239,10 @@ WARNING_CATEGORIES = [
     {
         "id": "low_requirements",
         "title": "Suspiciously low entry requirements",
+        # NOT negation-sensitive. These patterns MATCH ON NEGATION BY
+        # DESIGN: "no experience", "no interview", "no qualifications" ARE
+        # the scam signal. Applying negation filtering here would erase
+        # the whole category.
         "explanation": (
             "This posting advertises extremely low entry requirements, "
             "which frequently appear in fraudulent recruitment "
@@ -317,12 +426,29 @@ def _scan(text, categories, lime_index, lime_total):
     only if at least one pattern matched, and it carries the actual matched
     snippets as evidence plus the model's measured attribution for those
     words.
+
+    Categories flagged `negation_sensitive: True` have every candidate
+    match tested with `_is_negated`; matches inside a negation scope are
+    dropped. Categories without the flag behave exactly as before.
     """
     results = []
     for cat in categories:
+        neg_sensitive = cat.get("negation_sensitive", False)
         detected = []
-        for pattern in cat["patterns"]:
+        # Ordinary patterns count unconditionally; context-anchored patterns
+        # (ambiguous asset terms) count only with a same-sentence money anchor.
+        pattern_specs = (
+            [(p, False) for p in cat["patterns"]]
+            + [(p, True) for p in cat.get("context_anchored_patterns", [])]
+        )
+        for pattern, requires_money_context in pattern_specs:
             for m in pattern.finditer(text):
+                if neg_sensitive and _is_negated(text, m.start()):
+                    continue
+                if requires_money_context and not _MONEY_CONTEXT.search(
+                    _sentence_span(text, m.start())
+                ):
+                    continue
                 snippet = m.group(0).strip()
                 if snippet and snippet not in detected:
                     detected.append(snippet)

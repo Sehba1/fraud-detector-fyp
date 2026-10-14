@@ -1,69 +1,70 @@
-# ==========================================================
 # Python
-# ==========================================================
+venv/
+.venv/
 __pycache__/
 *.py[cod]
-*.pyo
-*.egg-info/
-.Python
-.venv/
-venv/
-env/
 .pytest_cache/
-.mypy_cache/
+.ipynb_checkpoints/
 
-# ==========================================================
-# Environment files (never commit secrets/config)
-# ==========================================================
+# Node / Vite
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-error.log*
+
+# Secrets
 .env
 .env.*
 !.env.example
+*.pem
+*.key
 
-# ==========================================================
-# Node / Frontend
-# ==========================================================
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# ==========================================================
-# ML data & model artifacts (large binary files — not versioned)
-# ==========================================================
-ml/data/raw/*
-!ml/data/raw/.gitkeep
-!ml/data/raw/README.md
-
-ml/data/processed/*
-!ml/data/processed/.gitkeep
-!ml/data/processed/README.md
-
-ml/saved_models/*
-!ml/saved_models/.gitkeep
-!ml/saved_models/README.md
-
-*.pt
-*.bin
-*.h5
-*.ckpt
-
-# ==========================================================
-# Jupyter
-# ==========================================================
-.ipynb_checkpoints/
-
-# ==========================================================
-# Database
-# ==========================================================
-*.sqlite3
+# Databases
 *.db
+*.sqlite
+*.sqlite3
+*.db-journal
 
-# ==========================================================
-# OS / Editor
-# ==========================================================
-.DS_Store
+# Model weights and checkpoints
+saved_models/
+checkpoint-*/
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.ckpt
+*.h5
+*.pkl
+*.joblib
+
+# Datasets
+ml/data/
+*.parquet
+
+# Training logs
+runs/
+wandb/
+*.log
+
+# One-off scratch scripts
+_fix*.py
+cf2.py
+
+# Packaged extension
+*.zip
+*.crx
+
+# OS / editor / OneDrive
+desktop.ini
 Thumbs.db
-.vscode/*
-!.vscode/settings.json
+.DS_Store
+.vscode/
+.idea/
+
+# Generated training data
+*.jsonl
+
+# Underscore-prefixed scratch scripts (keeps __init__.py)
+_[a-z]*.py
